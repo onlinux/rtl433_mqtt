@@ -1,8 +1,11 @@
 [secret]
 mqtt_user = 
 mqtt_password = 
-mqtt_broker_ip = 192.168.0.112
-#mqtt_broker_port = 1883
+mqtt_broker_ip = 
+mqtt_broker_port = 1883
+mysql_user = 
+mysql_password = 
+mysql_base = zibase
 
 [feedback]
 enable=false
