@@ -65,7 +65,7 @@ class UpdateDb(threading.Thread):
     def run(self):
         try:
 
-            con = mdb.connect('localhost', 'root', 'ericvde', 'zibase')
+            con = mdb.connect('localhost', 'user', 'nopassword', 'base')
             cur = con.cursor(mdb.cursors.DictCursor)
 
             if ('time' in data.keys() and 'temperature_C' in self.data.keys()):
@@ -134,7 +134,6 @@ class MqttPublish(threading.Thread):
 
         except:
             mqttc.connect(mqtt_broker_ip, mqtt_broker_port)
-            #mqttc.connect("192.168.0.112", 1883)
             logging.warning("%s Trying to reconnect once %s" %
                             (threading.current_thread(), sys.exc_info()[0]))
 
