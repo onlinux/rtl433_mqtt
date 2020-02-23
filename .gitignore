@@ -1,0 +1,7 @@
+.idea
+*.py[cod]
+*.log
+*.kate-swp
+venv/
+
+config.ini

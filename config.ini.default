@@ -1,0 +1,26 @@
+[secret]
+mqtt_user = 
+mqtt_password = 
+mqtt_broker_ip = 192.168.0.112
+#mqtt_broker_port = 1883
+
+[feedback]
+enable=false
+
+[loggers]
+keys=root
+
+[handlers]
+keys=consoleHandler
+
+[formatters]
+keys=
+
+[logger_root]
+level=DEBUG
+handlers=consoleHandler
+
+[handler_consoleHandler]
+class=StreamHandler
+level=DEBUG
+args=(sys.stdout,)
