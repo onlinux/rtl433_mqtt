@@ -1,4 +1,4 @@
-#! /usr/bin/python
+#! /home/pi/python/rtl433venv/venv/bin/python
 # -*- coding: utf-8 -*-
 #
 # Author: Eric Vandecasteele (c)2014
@@ -11,6 +11,7 @@
 # Import required Python libraries
 import os
 import sys
+import time
 from subprocess import PIPE, Popen, STDOUT
 import logging
 import threading
@@ -22,26 +23,48 @@ import ZiBase
 #from socket import *
 import socket
 import signal
-from snipshelpers.config_parser import SnipsConfigParser
+import ConfigParser
 
-logging.basicConfig(format='%(asctime)s %(levelname)s:%(message)s',
-                    filename='/var/log/rtl433.log', level=logging.INFO)
-
+LOGFORMAT ="%(asctime)s %(levelname)s:%(message)s"
 CONFIG_INI = "config.ini"
 # os.path.realpath returns the canonical path of the specified filename,
 # eliminating any symbolic links encountered in the path.
 path = os.path.dirname(os.path.realpath(sys.argv[0]))
 configPath = path + '/' + CONFIG_INI
+config = ConfigParser.RawConfigParser()
+config.read(configPath)
 
 try:
-        config = SnipsConfigParser.read_configuration_file(configPath)
-        logging.info(' config is: ' + configPath)
+        config.read(configPath)
+
 except BaseException:
         config = None
-        logging.info(' config.ini not found: ' + configPath)
-        
+
+
+# Read config.ini
+DEBUG = config.getboolean("global", "debug")
+MQTT_USER = config.get("secret","mqtt_user")
+MQTT_PASSWORD = config.get('secret', "mqtt_password")
+MQTT_BROKER_IP = config.get('secret', "mqtt_broker_ip")
+MQTT_BROKER_PORT = config.get('secret', "mqtt_broker_port")
+ZIBASE_IP = config.get('secret', "zibase_ip")
+
+if DEBUG:
+    logging.basicConfig(format=LOGFORMAT,
+                    filename="/var/log/rtl433.log",
+                    level=logging.DEBUG)
+else:
+    logging.basicConfig(format=LOGFORMAT,
+                    filename="/var/log/rtl433.log",
+                    level=logging.INFO)
+
+logging.info(" MQTT_BROKER_IP is " + MQTT_BROKER_IP + " port " + str(MQTT_BROKER_PORT))
+logging.info(" MQTT_USER is " + MQTT_USER )
+
 cmd = ['/usr/local/bin/rtl_433','-M', 'newmodel', '-F', 'json', '-R',
        '3', '-R', '12', '-R', '19', '-R', '50', '-R', '4', '-R', '96']
+
+
 
 def handler(signum=None, frame=None):
     logging.info(' Signal handler called with signal ' + str(signum))
@@ -108,21 +131,6 @@ class UpdateCube(threading.Thread):
             print "Oops!  UpdateCube Error"
 
 
-class MqttPublishDomoticz(threading.Thread):
-    def __init__(self, mqttc, data):
-        threading.Thread.__init__(self)
-        self.data = data
-
-    def run(self):
-        if ('temperature_C' in self.data.keys()):
-            try:
-                mqttc.publish("domoticz/in", self.data.rstrip('\r\n'), 0, True)
-            except:
-                mqttc.connect("192.168.0.112", 1883)
-                logging.warning("%s Trying to reconnect once %s" %
-                                (threading.current_thread(), sys.exc_info()[0]))
-
-
 class MqttPublish(threading.Thread):
     def __init__(self, mqttc, data):
         threading.Thread.__init__(self)
@@ -133,7 +141,7 @@ class MqttPublish(threading.Thread):
             mqttc.publish("onlinux/31830", self.data.rstrip('\r\n'), 0, True)
 
         except:
-            mqttc.connect(mqtt_broker_ip, mqtt_broker_port)
+            mqttc.connect(MQTT_BROKER_IP, MQTT_BROKER_PORT)
             logging.warning("%s Trying to reconnect once %s" %
                             (threading.current_thread(), sys.exc_info()[0]))
 
@@ -154,42 +162,45 @@ class UpdateZibase(threading.Thread):
                             (threading.current_thread(), sys.exc_info()[0]))
 
 
-class UpdateZibaseTemp(threading.Thread):
-    def __init__(self, data):
-        threading.Thread.__init__(self)
-        self.data = data
+# class UpdateZibaseTemp(threading.Thread):
+#     def __init__(self, data):
+#         threading.Thread.__init__(self)
+#         self.data = data
+#
+#     def run(self):
+#         try:
+#             #print 'UpdateZibaseTemp data: ', data
+#             #temp = -190
+#             temp = int(round(float(self.data['temperature_C']) * 10.0))
+#             hum = int(self.data['humidity']) if data.has_key('humidity') else 0
+#             batt = 0
+#
+#             #payload = '{"idx": "1", "svalue": "{};{};0" }'.format(self.data['temperature_C'], hum)
+#             # logging.warning(payload)
+#             #mqtt.publish("domoticz/in", payload, 0, True) ;
+#
+#             if ('battery' in self.data.keys() and self.data['battery'].upper() != 'OK'):
+#                 batt = 1  # 1 means Low batt
+#             #print 'temp: ', temp , 'hum: ' , hum, 'batt: ', batt
+#             logging.debug('Probe Id: %d' % self.data['id'])
+#
+#             #if self.data['id'] == 5:  # freezer
+#                 #zibase.setVirtualProbe(439204611, temp, hum, 17, batt)
+#             #elif self.data['id'] == 131:  # sonde auriol ext - Id 0x83 OS3930897409
+#                 #zibase.setVirtualProbe(3930897409, temp, hum, 17, batt)
+#             #elif self.data['id'] == 63:  # sonde auriol ext - Id 63
+#                 #zibase.setVirtualProbe(439204622, temp, hum, 17, batt)
+#         except:
+#             logging.warning(' %s %s' %
+#                             (threading.current_thread(), sys.exc_info()[0]))
 
-    def run(self):
-        try:
-            #print 'UpdateZibaseTemp data: ', data
-            #temp = -190
-            temp = int(round(float(self.data['temperature_C']) * 10.0))
-            hum = int(self.data['humidity']) if data.has_key('humidity') else 0
-            batt = 0
-
-            #payload = '{"idx": "1", "svalue": "{};{};0" }'.format(self.data['temperature_C'], hum)
-            # logging.warning(payload)
-            #mqtt.publish("domoticz/in", payload, 0, True) ;
-
-            if ('battery' in self.data.keys() and self.data['battery'].upper() != 'OK'):
-                batt = 1  # 1 means Low batt
-            #print 'temp: ', temp , 'hum: ' , hum, 'batt: ', batt
-            logging.debug('Probe Id: %d' % self.data['id'])
-
-            #if self.data['id'] == 5:  # freezer
-                #zibase.setVirtualProbe(439204611, temp, hum, 17, batt)
-            #elif self.data['id'] == 131:  # sonde auriol ext - Id 0x83 OS3930897409
-                #zibase.setVirtualProbe(3930897409, temp, hum, 17, batt)
-            #elif self.data['id'] == 63:  # sonde auriol ext - Id 63
-                #zibase.setVirtualProbe(439204622, temp, hum, 17, batt)
-        except:
-            logging.warning(' %s %s' %
-                            (threading.current_thread(), sys.exc_info()[0]))
-
+def on_log(mosq, obj, level, string):
+    """
+    What to do with debug log output from the MQTT library
+    """
+    logging.debug(string)
 
 # -------------------------------------------------------------------------
-zibase = ZiBase.ZiBase('192.168.0.100')  # Indiquer l'adresse IP de la zibase
-
 #   We're using a queue to capture output as it occurs
 try:
     from Queue import Queue, Empty
@@ -211,26 +222,21 @@ t = threading.Thread(target=enqueue_output, args=('stdout', p.stdout, q))
 t.daemon = True  # thread dies with the program
 t.start()
 
+zibase = ZiBase.ZiBase(ZIBASE_IP)  # Indiquer l'adresse IP de la zibase
+
 # Connection to mqtt broker
 mqttc = mqtt.Client("python_pub")
-# Read config.ini
-mqtt_user = config.get(
-        'secret', {"mqtt_user": "onlinux"}).get('mqtt_user', "onlinux")
-mqtt_password = config.get(
-        'secret', {"mqtt_password": "nopassword"}).get('mqtt_password', "nopassword")
-mqtt_broker_ip = config.get(
-        'secret', {"mqtt_broker_ip": "192.168.0.112"}).get('mqtt_broker_ip', "192.168.0.112")
-mqtt_broker_port = config.get(
-        'secret', {"mqtt_broker_port": 1883}).get('mqtt_broker_port', 1883)  
+mqttc.username_pw_set(MQTT_USER, MQTT_PASSWORD)
+if DEBUG:
+        mqttc.on_log = on_log
         
-logging.info(" mqtt_broker_ip is " + mqtt_broker_ip + " port " + str(mqtt_broker_port));        
-logging.info(" mqtt_user is " + mqtt_user + " / " + mqtt_password);
-
-mqttc.username_pw_set(mqtt_user, mqtt_password)
-
 try:
-    mqttc.connect(mqtt_broker_ip, int(mqtt_broker_port))
-    logging.info(" Connection to mqtt broker "+ mqtt_broker_ip + " OK");
+    result = mqttc.connect(MQTT_BROKER_IP, int(MQTT_BROKER_PORT), keepalive=60)
+    if result != 0:
+        logging.info(" Connection failed with error code %s. Retrying", result)
+        time.sleep(10)
+    else :
+        logging.info(" Connection to mqtt broker "+ MQTT_BROKER_IP + " OK");
 except:
     logging.warning("Oops!  Mqtt connection Error")
 
@@ -239,7 +245,7 @@ while 1:
     try:
         if not mqttc.socket():
             logging.warning("ERROR: connection failed. Please check user and password of mqtt broker, re-trying...")
-            mqttc.connect("192.168.0.112", 1883)
+            mqttc.connect(MQTT_BROKER_IP, int(MQTT_BROKER_PORT), keepalive=60)
     except:
         logging.warning("Oops!  Mqttconnect Error")
     try:
@@ -271,7 +277,6 @@ while 1:
                         # UpdateDb(data).start()
                         UpdateCube(data).start()
                         MqttPublish(mqttc, line).start()
-                        #MqttPublishDomoticz(mqttc, line).start()
 
                     lastDate = data['time']
                     lastId = data['id']
